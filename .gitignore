@@ -47,6 +47,10 @@ logs/
 outputs/
 runs/
 
+# Uploads (keep directory)
+static/uploads/*
+!static/uploads/.gitkeep
+
 # TensorBoard
 events.out.tfevents.*
 

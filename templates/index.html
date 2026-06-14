@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>图像分类系统</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            min-height: 100vh;
+            color: #e0e0e0;
+        }
+        .header {
+            background: rgba(255,255,255,0.05);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding: 16px 32px;
+            text-align: center;
+        }
+        .header h1 { font-size: 24px; background: linear-gradient(90deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .header .subtitle { font-size: 13px; color: #888; margin-top: 4px; }
+        .container { max-width: 900px; margin: 0 auto; padding: 24px 16px; }
+        .tabs { display: flex; gap: 4px; margin-bottom: 24px; background: rgba(255,255,255,0.05); border-radius: 12px; padding: 4px; }
+        .tab-btn {
+            flex: 1; padding: 12px; border: none; border-radius: 10px;
+            background: transparent; color: #999; font-size: 14px;
+            cursor: pointer; transition: all 0.3s;
+        }
+        .tab-btn.active { background: rgba(102,126,234,0.3); color: #fff; font-weight: 600; }
+        .tab-btn:hover:not(.active) { color: #ccc; background: rgba(255,255,255,0.05); }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .card {
+            background: rgba(255,255,255,0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px; padding: 24px; margin-bottom: 16px;
+        }
+        .card h3 { font-size: 16px; margin-bottom: 16px; color: #667eea; }
+
+        /* 拖拽上传区域 */
+        .drop-zone {
+            border: 2px dashed rgba(255,255,255,0.2);
+            border-radius: 12px; padding: 48px 24px;
+            text-align: center; cursor: pointer;
+            transition: all 0.3s;
+        }
+        .drop-zone:hover, .drop-zone.drag-over {
+            border-color: #667eea;
+            background: rgba(102,126,234,0.1);
+        }
+        .drop-zone .icon { font-size: 48px; margin-bottom: 12px; }
+        .drop-zone .text { font-size: 14px; color: #999; }
+        .drop-zone input { display: none; }
+
+        /* 按钮 */
+        .btn {
+            padding: 10px 24px; border: none; border-radius: 8px;
+            font-size: 14px; cursor: pointer; transition: all 0.3s;
+            font-weight: 500;
+        }
+        .btn-primary { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(102,126,234,0.4); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .btn-danger { background: rgba(220,53,69,0.8); color: #fff; }
+        .btn-sm { padding: 6px 14px; font-size: 12px; }
+
+        /* 表单 */
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; font-size: 13px; color: #aaa; margin-bottom: 6px; }
+        .form-group select, .form-group input {
+            width: 100%; padding: 8px 12px; border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.15);
+            background: rgba(255,255,255,0.08); color: #fff;
+            font-size: 14px;
+        }
+        .form-row { display: flex; gap: 12px; }
+        .form-row .form-group { flex: 1; }
+
+        /* 预测结果 */
+        .preview-img {
+            max-width: 300px; border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        .result-list { list-style: none; margin-top: 16px; }
+        .result-item {
+            display: flex; align-items: center; padding: 10px 12px;
+            margin-bottom: 6px; border-radius: 8px;
+            background: rgba(255,255,255,0.03);
+        }
+        .result-item .rank { width: 28px; font-weight: 700; color: #667eea; }
+        .result-item .name { flex: 1; font-size: 14px; }
+        .result-item .bar-wrap { width: 180px; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; }
+        .result-item .bar { height: 100%; border-radius: 4px; background: linear-gradient(90deg, #667eea, #764ba2); transition: width 0.5s; }
+        .result-item .conf { width: 70px; text-align: right; font-size: 13px; color: #aaa; }
+
+        /* 训练进度 */
+        .progress-wrap { margin-top: 16px; }
+        .progress-bar {
+            width: 100%; height: 12px; background: rgba(255,255,255,0.1);
+            border-radius: 6px; overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%; border-radius: 6px;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            transition: width 0.3s;
+        }
+        .status-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 16px; }
+        .status-item {
+            text-align: center; padding: 12px;
+            background: rgba(255,255,255,0.03); border-radius: 8px;
+        }
+        .status-item .value { font-size: 22px; font-weight: 700; color: #667eea; }
+        .status-item .label { font-size: 11px; color: #777; margin-top: 4px; }
+
+        /* 评估 */
+        .metric-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .metric-table th, .metric-table td {
+            padding: 8px 12px; text-align: center;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .metric-table th { color: #667eea; font-weight: 500; }
+
+        /* 消息 */
+        .msg { padding: 12px 16px; border-radius: 8px; margin-top: 12px; font-size: 13px; }
+        .msg-info { background: rgba(102,126,234,0.15); color: #667eea; }
+        .msg-error { background: rgba(220,53,69,0.15); color: #f4878f; }
+        .msg-success { background: rgba(40,167,69,0.15); color: #7ee08f; }
+
+        .hidden { display: none; }
+        .text-center { text-align: center; }
+        .mt-16 { margin-top: 16px; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>🖼️ 图像分类系统</h1>
+    <div class="subtitle">PyTorch + ResNet · 拖拽上传 · 一键训练</div>
+</div>
+
+<div class="container">
+
+    <!-- 标签页 -->
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('predict')">🔍 预测图片</button>
+        <button class="tab-btn" onclick="switchTab('train')">🚀 训练模型</button>
+        <button class="tab-btn" onclick="switchTab('evaluate')">📊 评估模型</button>
+    </div>
+
+    <!-- ========== 预测页 ========== -->
+    <div id="tab-predict" class="tab-content active">
+        <div class="card">
+            <h3>上传图片进行预测</h3>
+
+            {% if not model_ready %}
+            <div class="msg msg-info">⚠️ 模型尚未训练，请先切换到「训练模型」标签页训练模型</div>
+            {% endif %}
+
+            <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+                <div class="icon">📁</div>
+                <div class="text">点击选择图片，或拖拽图片到此处</div>
+                <div style="font-size: 11px; color: #555; margin-top: 8px;">支持 JPG / PNG / BMP / WebP</div>
+                <input type="file" id="fileInput" accept="image/*" onchange="handleFile(this.files[0])">
+            </div>
+
+            <div id="predictResult" class="hidden mt-16">
+                <div style="display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap;">
+                    <img id="previewImg" class="preview-img" src="" alt="预览">
+                    <div style="flex: 1; min-width: 250px;">
+                        <h4 style="margin-bottom: 12px; color: #aaa;">预测结果</h4>
+                        <ul class="result-list" id="resultList"></ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== 训练页 ========== -->
+    <div id="tab-train" class="tab-content">
+        <div class="card">
+            <h3>训练配置</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>模型</label>
+                    <select id="trainModel">
+                        <option value="custom_cnn">Custom CNN (轻量, 适合CPU)</option>
+                        <option value="resnet18">ResNet18 (推荐)</option>
+                        <option value="resnet50">ResNet50 (更准确)</option>
+                        <option value="mobilenet_v2">MobileNet V2 (移动端)</option>
+                        <option value="efficientnet_b0">EfficientNet B0</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>训练轮数</label>
+                    <input type="number" id="trainEpochs" value="5" min="1" max="200">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>学习率</label>
+                    <input type="number" id="trainLR" value="0.001" step="0.0001" min="0.00001" max="0.1">
+                </div>
+                <div class="form-group">
+                    <label>批次大小</label>
+                    <input type="number" id="trainBatch" value="32" min="4" max="256">
+                </div>
+            </div>
+
+            <button class="btn btn-primary" id="startTrainBtn" onclick="startTraining()">▶ 开始训练</button>
+            <button class="btn btn-danger btn-sm" id="stopTrainBtn" style="display:none;" onclick="location.reload()">停止 (刷新页面)</button>
+
+            <div id="trainStatus" class="hidden mt-16">
+                <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px;">
+                    <span id="trainMsg">准备中...</span>
+                    <span id="trainEpoch"></span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="trainProgress" style="width: 0%;"></div>
+                </div>
+
+                <div class="status-grid">
+                    <div class="status-item">
+                        <div class="value" id="sTrainLoss">-</div>
+                        <div class="label">训练损失</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="value" id="sTrainAcc">-</div>
+                        <div class="label">训练准确率</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="value" id="sValLoss">-</div>
+                        <div class="label">验证损失</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="value" id="sValAcc">-</div>
+                        <div class="label">验证准确率</div>
+                    </div>
+                </div>
+
+                <div id="trainHistory" class="mt-16" style="font-size: 12px; max-height: 200px; overflow-y: auto;">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== 评估页 ========== -->
+    <div id="tab-evaluate" class="tab-content">
+        <div class="card">
+            <h3>模型评估</h3>
+            <p style="font-size: 13px; color: #999; margin-bottom: 16px;">
+                在测试集上评估已训练模型的性能，生成准确率、精确率、召回率等指标
+            </p>
+
+            <button class="btn btn-primary" onclick="runEvaluate()">📊 开始评估</button>
+
+            <div id="evalResult" class="hidden mt-16">
+                <div class="status-grid">
+                    <div class="status-item">
+                        <div class="value" id="eAcc">-</div>
+                        <div class="label">准确率 Accuracy</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="value" id="ePrec">-</div>
+                        <div class="label">精确率 Precision</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="value" id="eRec">-</div>
+                        <div class="label">召回率 Recall</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="value" id="eF1">-</div>
+                        <div class="label">F1 Score</div>
+                    </div>
+                </div>
+
+                <div class="mt-16" style="overflow-x: auto;">
+                    <table class="metric-table" id="evalTable">
+                        <thead><tr><th>类别</th><th>精确率</th><th>召回率</th><th>F1</th><th>样本数</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+// ==================== 标签页切换 ====================
+function switchTab(name) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    event.target.classList.add('active');
+}
+
+// ==================== 拖拽上传 ====================
+const dropZone = document.getElementById('dropZone');
+['dragenter', 'dragover'].forEach(e => {
+    dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.add('drag-over'); });
+});
+['dragleave', 'drop'].forEach(e => {
+    dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.remove('drag-over'); });
+});
+dropZone.addEventListener('drop', e => {
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+});
+
+function handleFile(file) {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+        alert('请选择图片文件');
+        return;
+    }
+    // 预览
+    const reader = new FileReader();
+    reader.onload = e => {
+        document.getElementById('previewImg').src = e.target.result;
+        document.getElementById('predictResult').classList.remove('hidden');
+    };
+    reader.readAsDataURL(file);
+    // 上传预测
+    uploadPredict(file);
+}
+
+// ==================== 预测 ====================
+async function uploadPredict(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    const list = document.getElementById('resultList');
+    list.innerHTML = '<li style="color:#999; padding: 12px;">预测中...</li>';
+
+    try {
+        const resp = await fetch('/predict', { method: 'POST', body: formData });
+        const data = await resp.json();
+
+        if (data.error) {
+            list.innerHTML = `<li class="msg msg-error">${data.error}</li>`;
+            return;
+        }
+
+        const preds = data.result.predictions;
+        list.innerHTML = preds.map(p => `
+            <li class="result-item">
+                <span class="rank">#${p.rank}</span>
+                <span class="name">${p.class}</span>
+                <span class="bar-wrap"><span class="bar" style="width: ${parseFloat(p.confidence_pct)}%"></span></span>
+                <span class="conf">${p.confidence_pct}</span>
+            </li>
+        `).join('');
+
+    } catch (err) {
+        list.innerHTML = `<li class="msg msg-error">网络错误: ${err.message}</li>`;
+    }
+}
+
+// ==================== 训练 ====================
+let trainInterval = null;
+
+async function startTraining() {
+    const btn = document.getElementById('startTrainBtn');
+    btn.disabled = true;
+    btn.textContent = '启动中...';
+    document.getElementById('stopTrainBtn').style.display = 'inline-block';
+
+    const config = {
+        model: document.getElementById('trainModel').value,
+        epochs: parseInt(document.getElementById('trainEpochs').value),
+        lr: parseFloat(document.getElementById('trainLR').value),
+        batch_size: parseInt(document.getElementById('trainBatch').value),
+    };
+
+    try {
+        const resp = await fetch('/start-training', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(config),
+        });
+        const data = await resp.json();
+        if (data.error) {
+            alert(data.error);
+            btn.disabled = false;
+            btn.textContent = '▶ 开始训练';
+            return;
+        }
+    } catch (err) {
+        alert('启动失败: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = '▶ 开始训练';
+        return;
+    }
+
+    btn.textContent = '训练中...';
+    document.getElementById('trainStatus').classList.remove('hidden');
+
+    // 轮询进度
+    trainInterval = setInterval(pollTrainingStatus, 2000);
+    pollTrainingStatus();
+}
+
+async function pollTrainingStatus() {
+    try {
+        const resp = await fetch('/training-status');
+        const s = await resp.json();
+
+        document.getElementById('trainMsg').textContent = s.message;
+        document.getElementById('trainEpoch').textContent = s.epoch ? `Epoch ${s.epoch}/${s.total_epochs}` : '';
+        document.getElementById('trainProgress').style.width = s.progress + '%';
+        document.getElementById('sTrainLoss').textContent = s.train_loss || '-';
+        document.getElementById('sTrainAcc').textContent = s.train_acc ? (s.train_acc * 100).toFixed(2) + '%' : '-';
+        document.getElementById('sValLoss').textContent = s.val_loss || '-';
+        document.getElementById('sValAcc').textContent = s.val_acc ? (s.val_acc * 100).toFixed(2) + '%' : '-';
+
+        // 历史
+        const histDiv = document.getElementById('trainHistory');
+        if (s.history && s.history.length > 0) {
+            histDiv.innerHTML = '<table class="metric-table"><thead><tr><th>Epoch</th><th>Train Loss</th><th>Train Acc</th><th>Val Loss</th><th>Val Acc</th></tr></thead><tbody>' +
+                s.history.map(h => `<tr><td>${h.epoch}</td><td>${h.train_loss}</td><td>${(h.train_acc*100).toFixed(1)}%</td><td>${h.val_loss}</td><td>${(h.val_acc*100).toFixed(1)}%</td></tr>`).join('') +
+                '</tbody></table>';
+        }
+
+        if (!s.running) {
+            clearInterval(trainInterval);
+            document.getElementById('startTrainBtn').disabled = false;
+            document.getElementById('startTrainBtn').textContent = '▶ 开始训练';
+            document.getElementById('stopTrainBtn').style.display = 'none';
+        }
+    } catch (err) {}
+}
+
+// ==================== 评估 ====================
+async function runEvaluate() {
+    const resultDiv = document.getElementById('evalResult');
+    resultDiv.classList.remove('hidden');
+    document.getElementById('eAcc').textContent = '...';
+    document.getElementById('ePrec').textContent = '...';
+    document.getElementById('eRec').textContent = '...';
+    document.getElementById('eF1').textContent = '...';
+
+    try {
+        const resp = await fetch('/evaluate', { method: 'POST' });
+        const data = await resp.json();
+
+        if (data.error) {
+            alert(data.error);
+            resultDiv.classList.add('hidden');
+            return;
+        }
+
+        const m = data.metrics;
+        document.getElementById('eAcc').textContent = (m.accuracy * 100).toFixed(2) + '%';
+        document.getElementById('ePrec').textContent = (m.precision_weighted * 100).toFixed(2) + '%';
+        document.getElementById('eRec').textContent = (m.recall_weighted * 100).toFixed(2) + '%';
+        document.getElementById('eF1').textContent = (m.f1_weighted * 100).toFixed(2) + '%';
+
+        const tbody = document.querySelector('#evalTable tbody');
+        tbody.innerHTML = Object.entries(m.per_class).map(([cls, cm]) =>
+            `<tr>
+                <td>${cls}</td>
+                <td>${(cm.precision*100).toFixed(1)}%</td>
+                <td>${(cm.recall*100).toFixed(1)}%</td>
+                <td>${(cm.f1*100).toFixed(1)}%</td>
+                <td>${cm.support}</td>
+            </tr>`
+        ).join('');
+
+    } catch (err) {
+        alert('评估失败: ' + err.message);
+        resultDiv.classList.add('hidden');
+    }
+}
+</script>
+</body>
+</html>
