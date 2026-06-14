@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual Environment
+venv/
+env/
+.venv/
+.env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# Model & Checkpoints
+checkpoints/
+*.pth
+*.pt
+*.onnx
+
+# Data (except directory structure)
+data/train/*
+data/val/*
+data/test/*
+!data/train/.gitkeep
+!data/val/.gitkeep
+!data/test/.gitkeep
+
+# Logs & Outputs
+logs/
+outputs/
+runs/
+
+# TensorBoard
+events.out.tfevents.*
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Claude
+.claude/
+
+# Environment variables
+.env
+.env.local
+
+# Coverage
+htmlcov/
+.coverage
+.coverage.*
