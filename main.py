@@ -71,7 +71,7 @@ def main():
     # ===== 评估 =====
     eval_parser = subparsers.add_parser("evaluate", help="评估模型")
     eval_parser.add_argument(
-        "--checkpoint", type=str, default="checkpoints/best_model.pth",
+        "--checkpoint", type=str, default=None,
         help="模型检查点路径"
     )
     eval_parser.add_argument(
@@ -87,7 +87,7 @@ def main():
     pred_parser = subparsers.add_parser("predict", help="单张图片预测")
     pred_parser.add_argument("image", type=str, help="图片路径")
     pred_parser.add_argument(
-        "--checkpoint", type=str, default="checkpoints/best_model.pth",
+        "--checkpoint", type=str, default=None,
         help="模型检查点路径"
     )
     pred_parser.add_argument(
@@ -99,7 +99,7 @@ def main():
     folder_parser = subparsers.add_parser("predict-folder", help="文件夹批量预测")
     folder_parser.add_argument("folder", type=str, help="图片文件夹路径")
     folder_parser.add_argument(
-        "--checkpoint", type=str, default="checkpoints/best_model.pth",
+        "--checkpoint", type=str, default=None,
         help="模型检查点路径"
     )
     folder_parser.add_argument(

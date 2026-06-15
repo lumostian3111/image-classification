@@ -33,19 +33,44 @@ app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16MB
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
 # ==================== 全局状态 ====================
-training_status = {
-    "running": False,
-    "message": "尚未训练",
-    "progress": 0,
-    "epoch": 0,
-    "total_epochs": 0,
-    "train_loss": 0,
-    "train_acc": 0,
-    "val_loss": 0,
-    "val_acc": 0,
-    "best_acc": 0,
-    "history": [],
-}
+
+def _init_training_status():
+    """初始化训练状态，检测已有模型"""
+    best_path = os.path.join(Config.CHECKPOINT_DIR, "best_model.pth")
+    if os.path.exists(best_path):
+        try:
+            ckpt = torch.load(best_path, map_location="cpu", weights_only=False)
+            return {
+                "running": False,
+                "message": f"已有训练模型 (Epoch {ckpt.get('epoch', '?')}, "
+                           f"Best Acc: {ckpt.get('best_acc', 0):.2%})",
+                "progress": 0,
+                "epoch": ckpt.get("epoch", 0),
+                "total_epochs": ckpt.get("epoch", 0),
+                "train_loss": 0,
+                "train_acc": 0,
+                "val_loss": 0,
+                "val_acc": ckpt.get("best_acc", 0),
+                "best_acc": ckpt.get("best_acc", 0),
+                "history": [],
+            }
+        except Exception:
+            pass
+    return {
+        "running": False,
+        "message": "尚未训练",
+        "progress": 0,
+        "epoch": 0,
+        "total_epochs": 0,
+        "train_loss": 0,
+        "train_acc": 0,
+        "val_loss": 0,
+        "val_acc": 0,
+        "best_acc": 0,
+        "history": [],
+    }
+
+training_status = _init_training_status()
 
 
 # ==================== 页面路由 ====================
@@ -54,11 +79,11 @@ training_status = {
 def index():
     """主页"""
     # 检查模型是否可用
-    model_ready = os.path.exists("checkpoints/best_model.pth")
+    model_ready = os.path.exists(os.path.join(Config.CHECKPOINT_DIR, "best_model.pth"))
     class_names = []
     if model_ready:
         try:
-            ckpt = torch.load("checkpoints/best_model.pth", map_location="cpu", weights_only=False)
+            ckpt = torch.load(os.path.join(Config.CHECKPOINT_DIR, "best_model.pth"), map_location="cpu", weights_only=False)
             class_names = ckpt.get("class_names", [])
         except Exception:
             pass
@@ -85,7 +110,7 @@ def predict():
     file.save(filepath)
 
     # 检查模型
-    checkpoint_path = "checkpoints/best_model.pth"
+    checkpoint_path = os.path.join(Config.CHECKPOINT_DIR, "best_model.pth")
     if not os.path.exists(checkpoint_path):
         return jsonify({"error": "模型尚未训练，请先训练模型"}), 400
 
@@ -256,7 +281,7 @@ def _run_training():
 @app.route("/evaluate", methods=["POST"])
 def run_evaluation():
     """运行评估"""
-    checkpoint_path = "checkpoints/best_model.pth"
+    checkpoint_path = os.path.join(Config.CHECKPOINT_DIR, "best_model.pth")
     if not os.path.exists(checkpoint_path):
         return jsonify({"error": "模型尚未训练"}), 400
 

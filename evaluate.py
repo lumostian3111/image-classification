@@ -29,7 +29,7 @@ from utils import (
 
 @torch.no_grad()
 def evaluate(
-    checkpoint_path: str = "checkpoints/best_model.pth",
+    checkpoint_path: str = None,
     output_dir: Optional[str] = None,
 ) -> Dict:
     """
@@ -43,6 +43,9 @@ def evaluate(
         评估指标字典
     """
     Config.create_dirs()
+
+    if checkpoint_path is None:
+        checkpoint_path = os.path.join(Config.CHECKPOINT_DIR, "best_model.pth")
 
     if output_dir is None:
         output_dir = Config.OUTPUT_DIR

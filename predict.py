@@ -24,7 +24,7 @@ class ImageClassifier:
 
     def __init__(
         self,
-        checkpoint_path: str = "checkpoints/best_model.pth",
+        checkpoint_path: str = None,
         class_names_path: Optional[str] = None,
         device: Optional[str] = None,
     ):
@@ -36,6 +36,8 @@ class ImageClassifier:
             class_names_path: 类别名称 JSON 文件路径
             device: 推理设备
         """
+        if checkpoint_path is None:
+            checkpoint_path = os.path.join(Config.CHECKPOINT_DIR, "best_model.pth")
         self.device = torch.device(device or Config.DEVICE)
 
         # 加载检查点
@@ -197,10 +199,12 @@ class ImageClassifier:
 
 def predict_single(
     image_path: str,
-    checkpoint_path: str = "checkpoints/best_model.pth",
+    checkpoint_path: str = None,
     top_k: int = 3,
 ):
     """便捷函数: 预测单张图片并打印结果"""
+    if checkpoint_path is None:
+        checkpoint_path = os.path.join(Config.CHECKPOINT_DIR, "best_model.pth")
     classifier = ImageClassifier(checkpoint_path=checkpoint_path)
     result = classifier.predict(image_path, top_k=top_k)
     classifier.print_result(result)
@@ -209,9 +213,11 @@ def predict_single(
 
 def predict_folder(
     folder_path: str,
-    checkpoint_path: str = "checkpoints/best_model.pth",
+    checkpoint_path: str = None,
     top_k: int = 3,
 ):
     """便捷函数: 预测整个文件夹"""
+    if checkpoint_path is None:
+        checkpoint_path = os.path.join(Config.CHECKPOINT_DIR, "best_model.pth")
     classifier = ImageClassifier(checkpoint_path=checkpoint_path)
     return classifier.predict_folder(folder_path, top_k=top_k)
