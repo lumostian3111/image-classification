@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from config import Config
-from dataset import create_dataloaders, get_test_transforms
+from dataset import create_dataloaders, denormalize
 from models import create_model
 from utils import (
     compute_metrics,
@@ -22,7 +22,6 @@ from utils import (
     plot_sample_predictions,
     save_class_names,
     load_checkpoint,
-    denormalize,
     get_timestamp,
     AverageMeter,
 )
@@ -77,6 +76,9 @@ def evaluate(
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
 
     # 从检查点恢复模型配置
+    if "model_name" in checkpoint:
+        Config.MODEL_NAME = checkpoint["model_name"]
+
     if "num_classes" in checkpoint:
         Config.NUM_CLASSES = checkpoint["num_classes"]
     else:
@@ -85,7 +87,10 @@ def evaluate(
     if len(class_names) == 0 and "class_names" in checkpoint:
         class_names = checkpoint["class_names"]
 
-    model = create_model(num_classes=Config.NUM_CLASSES)
+    model = create_model(
+        num_classes=Config.NUM_CLASSES,
+        model_name=Config.MODEL_NAME,
+    )
     model.load_state_dict(checkpoint["model_state_dict"])
     model = model.to(device)
     model.eval()

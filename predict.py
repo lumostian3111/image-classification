@@ -54,8 +54,15 @@ class ImageClassifier:
         self.num_classes = len(self.class_names)
         Config.NUM_CLASSES = self.num_classes
 
+        # 从检查点恢复模型类型
+        if "model_name" in checkpoint:
+            Config.MODEL_NAME = checkpoint["model_name"]
+
         # 加载模型
-        self.model = create_model(num_classes=self.num_classes)
+        self.model = create_model(
+            num_classes=self.num_classes,
+            model_name=Config.MODEL_NAME,
+        )
         self.model.load_state_dict(checkpoint["model_state_dict"])
         self.model = self.model.to(self.device)
         self.model.eval()

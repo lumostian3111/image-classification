@@ -4,9 +4,13 @@ Flask 驱动的浏览器交互界面
 """
 
 import os
+
+# 修复 Windows 上 OpenMP DLL 冲突问题
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 import json
 import threading
 import time
+import webbrowser
 from pathlib import Path
 
 import torch
@@ -271,8 +275,28 @@ if __name__ == "__main__":
     print("  Image Classification System - Web UI")
     print("=" * 50)
     print()
-    print("  Open in browser: http://localhost:5000")
+    print("  Starting server...")
     print()
     print("  Press Ctrl+C to stop")
     print("=" * 50 + "\n")
-    app.run(host="0.0.0.0", port=5000, debug=False)
+
+    # 自动打开浏览器
+    url = "http://localhost:5000"
+    try:
+        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+        print(f"  >> 正在打开浏览器: {url}\n")
+    except Exception:
+        print(f"  >> 请手动打开浏览器访问: {url}\n")
+
+    try:
+        app.run(host="0.0.0.0", port=5000, debug=False)
+    except KeyboardInterrupt:
+        print("\n\n  系统已关闭\n")
+    except OSError as e:
+        if "Address already in use" in str(e) or "10048" in str(e):
+            print(f"\n  [X] 端口 5000 已被占用，请先关闭其他程序")
+            print("     或运行: netstat -ano | findstr :5000")
+        else:
+            print(f"\n  [X] 启动失败: {e}")
+        print("\n  按任意键退出...")
+        input()

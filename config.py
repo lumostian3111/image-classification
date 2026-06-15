@@ -4,6 +4,9 @@
 """
 
 import os
+# 修复 Windows 上 OpenMP DLL 冲突问题（必须放在 import torch 之前）
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+
 import torch
 
 
