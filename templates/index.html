@@ -133,6 +133,26 @@
         .hidden { display: none; }
         .text-center { text-align: center; }
         .mt-16 { margin-top: 16px; }
+        .mb-8 { margin-bottom: 8px; }
+        .text-sm { font-size: 12px; color: #777; }
+
+        /* 类别标签 */
+        .class-tag {
+            display: inline-block; padding: 4px 12px; margin: 3px;
+            background: rgba(102,126,234,0.2); border-radius: 20px;
+            font-size: 13px; color: #aab;
+        }
+        .class-tag .badge {
+            background: rgba(255,255,255,0.1); border-radius: 10px;
+            padding: 1px 7px; font-size: 11px; margin-left: 4px;
+        }
+
+        /* 文件列表 */
+        .file-list {
+            max-height: 150px; overflow-y: auto; margin-top: 12px;
+            font-size: 12px; color: #aaa;
+        }
+        .file-list li { padding: 2px 0; }
     </style>
 </head>
 <body>
@@ -149,6 +169,7 @@
         <button class="tab-btn active" onclick="switchTab('predict')">🔍 预测图片</button>
         <button class="tab-btn" onclick="switchTab('train')">🚀 训练模型</button>
         <button class="tab-btn" onclick="switchTab('evaluate')">📊 评估模型</button>
+        <button class="tab-btn" onclick="switchTab('data')">📂 数据管理</button>
     </div>
 
     <!-- ========== 预测页 ========== -->
@@ -287,6 +308,49 @@
         </div>
     </div>
 
+    <!-- ========== 数据管理页 ========== -->
+    <div id="tab-data" class="tab-content">
+        <!-- 已有类别 -->
+        <div class="card">
+            <h3>📋 当前类别</h3>
+            <div id="classList" style="min-height: 40px;">
+                <span style="color: #777; font-size: 13px;">加载中...</span>
+            </div>
+            <button class="btn btn-sm btn-primary mt-16" onclick="refreshClasses()" style="background: rgba(255,255,255,0.1);">🔄 刷新</button>
+        </div>
+
+        <!-- 导入新类别 -->
+        <div class="card">
+            <h3>📥 导入新类别图片</h3>
+            <p class="text-sm mb-8">
+                输入类别名称并上传图片，系统会自动按比例分配到训练集/验证集/测试集。
+                如果类别已存在，图片会追加到现有数据中。
+            </p>
+
+            <div class="form-group">
+                <label>类别名称（文件夹名）</label>
+                <input type="text" id="importClassName" placeholder="例如: other、flower、dog..."
+                       style="font-size: 14px;">
+            </div>
+
+            <div class="drop-zone" id="importDropZone" onclick="document.getElementById('importFileInput').click()">
+                <div class="icon">📁</div>
+                <div class="text" id="importZoneText">点击选择图片，或拖拽图片到此处（可多选）</div>
+                <div style="font-size: 11px; color: #555; margin-top: 8px;">支持 JPG / PNG / BMP / WebP</div>
+                <input type="file" id="importFileInput" accept="image/*" multiple
+                       onchange="handleImportFiles(this.files)" style="display: none;">
+            </div>
+
+            <div id="importFileList" class="file-list hidden"></div>
+
+            <button class="btn btn-primary mt-16" id="importBtn" onclick="importClass()" disabled>
+                📥 导入图片
+            </button>
+
+            <div id="importMsg"></div>
+        </div>
+    </div>
+
 </div>
 
 <script>
@@ -296,6 +360,7 @@ function switchTab(name) {
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
     document.getElementById('tab-' + name).classList.add('active');
     event.target.classList.add('active');
+    if (name === 'data') refreshClasses();
 }
 
 // ==================== 拖拽上传 ====================
@@ -474,6 +539,114 @@ async function runEvaluate() {
         resultDiv.classList.add('hidden');
     }
 }
+// ==================== 数据管理 ====================
+let importFiles = [];
+
+function refreshClasses() {
+    fetch('/list-classes')
+        .then(r => r.json())
+        .then(data => {
+            const div = document.getElementById('classList');
+            if (data.classes.length === 0) {
+                div.innerHTML = '<span style="color: #777; font-size: 13px;">暂无类别，请先导入数据</span>';
+                return;
+            }
+            div.innerHTML = data.classes.map(c =>
+                `<span class="class-tag">
+                    ${c.name}
+                    <span class="badge">共 ${c.total} 张</span>
+                    <span class="badge" style="font-size:10px;">训练${c.train}/验证${c.val}/测试${c.test}</span>
+                </span>`
+            ).join('');
+        })
+        .catch(() => {
+            document.getElementById('classList').innerHTML = '<span style="color: #f4878f;">加载失败</span>';
+        });
+}
+
+// 拖拽支持 (导入区)
+const importDropZone = document.getElementById('importDropZone');
+['dragenter', 'dragover'].forEach(e => {
+    importDropZone.addEventListener(e, ev => { ev.preventDefault(); importDropZone.classList.add('drag-over'); });
+});
+['dragleave', 'drop'].forEach(e => {
+    importDropZone.addEventListener(e, ev => { ev.preventDefault(); importDropZone.classList.remove('drag-over'); });
+});
+importDropZone.addEventListener('drop', e => {
+    const files = e.dataTransfer.files;
+    if (files.length > 0) handleImportFiles(files);
+});
+
+function handleImportFiles(files) {
+    importFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+    if (importFiles.length === 0) {
+        alert('请选择图片文件');
+        return;
+    }
+
+    const list = document.getElementById('importFileList');
+    list.classList.remove('hidden');
+    list.innerHTML = `<p style="color:#667eea; margin-bottom:6px;">已选择 ${importFiles.length} 张图片:</p>` +
+        '<ul>' + importFiles.slice(0, 50).map(f => `<li>📷 ${f.name}</li>`).join('') +
+        (importFiles.length > 50 ? `<li style="color:#777;">...还有 ${importFiles.length - 50} 张</li>` : '') +
+        '</ul>';
+
+    document.getElementById('importZoneText').textContent = `已选择 ${importFiles.length} 张图片（点击重新选择）`;
+    document.getElementById('importBtn').disabled = false;
+}
+
+async function importClass() {
+    const className = document.getElementById('importClassName').value.trim();
+    if (!className) {
+        alert('请输入类别名称');
+        return;
+    }
+
+    const btn = document.getElementById('importBtn');
+    btn.disabled = true;
+    btn.textContent = '导入中...';
+
+    const formData = new FormData();
+    formData.append('class_name', className);
+    importFiles.forEach(f => formData.append('images', f));
+
+    const msgDiv = document.getElementById('importMsg');
+
+    try {
+        const resp = await fetch('/import-class', { method: 'POST', body: formData });
+        const data = await resp.json();
+
+        if (data.error) {
+            msgDiv.innerHTML = `<div class="msg msg-error">❌ ${data.error}</div>`;
+        } else {
+            msgDiv.innerHTML = `
+                <div class="msg msg-success">
+                    ✅ ${data.message}<br>
+                    <span style="font-size: 12px;">
+                        训练集: ${data.distribution.train} 张 |
+                        验证集: ${data.distribution.val} 张 |
+                        测试集: ${data.distribution.test} 张
+                    </span>
+                </div>`;
+            // 清空
+            importFiles = [];
+            document.getElementById('importFileList').classList.add('hidden');
+            document.getElementById('importZoneText').textContent = '点击选择图片，或拖拽图片到此处（可多选）';
+            document.getElementById('importClassName').value = '';
+            refreshClasses();
+        }
+    } catch (err) {
+        msgDiv.innerHTML = `<div class="msg msg-error">❌ 网络错误: ${err.message}</div>`;
+    }
+
+    btn.disabled = false;
+    btn.textContent = '📥 导入图片';
+}
+
+// 页面加载时自动获取类别列表
+document.addEventListener('DOMContentLoaded', () => {
+    refreshClasses();
+});
 </script>
 </body>
 </html>

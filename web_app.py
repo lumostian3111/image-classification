@@ -4,6 +4,7 @@ Flask 驱动的浏览器交互界面
 """
 
 import os
+import shutil
 
 # 修复 Windows 上 OpenMP DLL 冲突问题
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
@@ -25,10 +26,13 @@ from config import Config
 from models import create_model, count_parameters
 from predict import ImageClassifier
 from dataset import get_val_transforms
+from prepare_data import split_to_splits, IMAGE_EXTENSIONS
 
 app = Flask(__name__)
 app.config["UPLOAD_FOLDER"] = os.path.join(Config.ROOT_DIR, "static", "uploads")
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16MB
+# 临时目录：用于接收用户上传的图片，分配完成后自动清理
+TEMP_IMPORT_DIR = os.path.join(Config.ROOT_DIR, "temp_imports")
 
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
@@ -87,7 +91,22 @@ def index():
             class_names = ckpt.get("class_names", [])
         except Exception:
             pass
-    return render_template("index.html", model_ready=model_ready, class_names=class_names)
+
+    # 扫描 data/train 获取数据集中的实际类别
+    data_classes = []
+    train_dir = Config.TRAIN_DIR
+    if os.path.isdir(train_dir):
+        for d in sorted(os.listdir(train_dir)):
+            full = os.path.join(train_dir, d)
+            if os.path.isdir(full) and not d.startswith("."):
+                count = len([f for f in os.listdir(full)
+                           if os.path.splitext(f)[1].lower() in IMAGE_EXTENSIONS])
+                data_classes.append({"name": d, "count": count})
+
+    return render_template("index.html",
+                         model_ready=model_ready,
+                         class_names=class_names,
+                         data_classes=data_classes)
 
 
 # ==================== 预测 API ====================
@@ -291,6 +310,110 @@ def run_evaluation():
         return jsonify({"success": True, "metrics": metrics})
     except Exception as e:
         return jsonify({"error": f"评估失败: {str(e)}"}), 500
+
+
+# ==================== 数据导入 API ====================
+
+@app.route("/list-classes")
+def list_classes():
+    """列出当前数据集中已有的类别"""
+    train_dir = Config.TRAIN_DIR
+    classes = []
+    if os.path.isdir(train_dir):
+        for d in sorted(os.listdir(train_dir)):
+            full = os.path.join(train_dir, d)
+            if os.path.isdir(full) and not d.startswith("."):
+                # 统计各 split 中的图片数
+                train_count = len([
+                    f for f in os.listdir(full)
+                    if os.path.splitext(f)[1].lower() in IMAGE_EXTENSIONS
+                ])
+                val_count = 0
+                val_dir = os.path.join(Config.VAL_DIR, d)
+                if os.path.isdir(val_dir):
+                    val_count = len([
+                        f for f in os.listdir(val_dir)
+                        if os.path.splitext(f)[1].lower() in IMAGE_EXTENSIONS
+                    ])
+                test_count = 0
+                test_dir = os.path.join(Config.TEST_DIR, d)
+                if os.path.isdir(test_dir):
+                    test_count = len([
+                        f for f in os.listdir(test_dir)
+                        if os.path.splitext(f)[1].lower() in IMAGE_EXTENSIONS
+                    ])
+                classes.append({
+                    "name": d,
+                    "train": train_count,
+                    "val": val_count,
+                    "test": test_count,
+                    "total": train_count + val_count + test_count,
+                })
+    return jsonify({"classes": classes, "total": len(classes)})
+
+
+@app.route("/import-class", methods=["POST"])
+def import_class():
+    """接收用户上传的图片 + 类别名，调用 split_to_splits 分配"""
+    class_name = (request.form.get("class_name") or "").strip()
+    if not class_name:
+        return jsonify({"error": "请输入类别名称"}), 400
+
+    # 安全校验：类别名只能包含字母、数字、下划线、中文
+    if not class_name.replace("_", "").replace("-", "").isalnum():
+        return jsonify({"error": "类别名只能包含字母、数字、下划线或中文"}), 400
+
+    files = request.files.getlist("images")
+    if not files or len(files) == 0:
+        return jsonify({"error": "请选择至少一张图片"}), 400
+
+    # 保存到临时目录
+    import uuid
+    batch_id = uuid.uuid4().hex[:8]
+    temp_class_dir = os.path.join(TEMP_IMPORT_DIR, batch_id, class_name)
+    os.makedirs(temp_class_dir, exist_ok=True)
+
+    saved_count = 0
+    errors = []
+    for f in files:
+        if f.filename == "":
+            continue
+        ext = os.path.splitext(f.filename)[1].lower()
+        if ext not in IMAGE_EXTENSIONS:
+            errors.append(f"跳过非图片文件: {f.filename}")
+            continue
+        # 保留原文件名，加随机前缀防重名
+        safe_name = f"{batch_id}_{saved_count:04d}{ext}"
+        f.save(os.path.join(temp_class_dir, safe_name))
+        saved_count += 1
+
+    if saved_count == 0:
+        shutil.rmtree(os.path.join(TEMP_IMPORT_DIR, batch_id), ignore_errors=True)
+        return jsonify({"error": "没有有效的图片文件，" + "; ".join(errors)}), 400
+
+    # 调用 split_to_splits 自动分配到 train/val/test
+    try:
+        src_dir = os.path.join(TEMP_IMPORT_DIR, batch_id)
+        split_to_splits(src_dir=src_dir, move=True)
+    except Exception as e:
+        return jsonify({"error": f"分配失败: {str(e)}"}), 500
+
+    # 清理临时目录（图片已 move 走，只删空文件夹）
+    shutil.rmtree(os.path.join(TEMP_IMPORT_DIR, batch_id), ignore_errors=True)
+
+    # 统计分配后的数量
+    train_count = len(os.listdir(os.path.join(Config.TRAIN_DIR, class_name)))
+    val_count = len(os.listdir(os.path.join(Config.VAL_DIR, class_name)))
+    test_count = len(os.listdir(os.path.join(Config.TEST_DIR, class_name)))
+
+    return jsonify({
+        "success": True,
+        "message": f"类别「{class_name}」已导入！共 {saved_count} 张图片",
+        "class_name": class_name,
+        "total": saved_count,
+        "distribution": {"train": train_count, "val": val_count, "test": test_count},
+        "warnings": errors if errors else None,
+    })
 
 
 # ==================== 启动 ====================
