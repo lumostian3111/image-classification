@@ -418,6 +418,16 @@ def import_class():
 
 # ==================== 启动 ====================
 
+def _find_free_port(start=5000, end=5020):
+    """在指定范围内查找可用端口"""
+    import socket
+    for p in range(start, end + 1):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            if s.connect_ex(("127.0.0.1", p)) != 0:
+                return p
+    raise RuntimeError(f"端口 {start}-{end} 均被占用，请先释放一个端口")
+
+
 if __name__ == "__main__":
     print("\n" + "=" * 50)
     print("  Image Classification System - Web UI")
@@ -428,22 +438,43 @@ if __name__ == "__main__":
     print("  Press Ctrl+C to stop")
     print("=" * 50 + "\n")
 
-    # 自动打开浏览器
-    url = "http://localhost:5000"
+    # 自动寻找可用端口
     try:
-        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+        port = _find_free_port(5000, 5020)
+    except RuntimeError as e:
+        print(f"\n  [X] {e}")
+        print("\n  按任意键退出...")
+        input()
+        exit(1)
+
+    url = f"http://localhost:{port}"
+    print(f"  [OK] 已自动选择端口: {port}\n")
+
+    def _open_browser():
+        """等待服务就绪后再打开浏览器"""
+        import urllib.request
+        for _ in range(10):
+            try:
+                urllib.request.urlopen(url, timeout=1)
+                webbrowser.open(url)
+                return
+            except Exception:
+                time.sleep(0.5)
+
+    try:
+        threading.Timer(1.0, _open_browser).start()
         print(f"  >> 正在打开浏览器: {url}\n")
     except Exception:
         print(f"  >> 请手动打开浏览器访问: {url}\n")
 
     try:
-        app.run(host="0.0.0.0", port=5000, debug=False)
+        app.run(host="0.0.0.0", port=port, debug=False)
     except KeyboardInterrupt:
         print("\n\n  系统已关闭\n")
     except OSError as e:
         if "Address already in use" in str(e) or "10048" in str(e):
-            print(f"\n  [X] 端口 5000 已被占用，请先关闭其他程序")
-            print("     或运行: netstat -ano | findstr :5000")
+            print(f"\n  [X] 端口 {port} 已被占用，请先关闭其他程序")
+            print(f"     或运行: netstat -ano | findstr :{port}")
         else:
             print(f"\n  [X] 启动失败: {e}")
         print("\n  按任意键退出...")
